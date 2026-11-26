@@ -1,0 +1,60 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      # Пароль лише для локального запуску; порт доступний тільки з цього комп'ютера
+      MYSQL_ROOT_PASSWORD: local_password
+      MYSQL_DATABASE: neo_data
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - ./init_db:/docker-entrypoint-initdb.d:ro
+      - ./data:/var/lib/mysql-files
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      # TCP-перевірка проходить лише після завершення ініціалізації та завантаження даних
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-plocal_password"]
+      interval: 5s
+      retries: 60
+
+  # Службова база Airflow: потрібна для LocalExecutor
+  postgres:
+    image: postgres:14.1
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 20
+
+  airflow:
+    image: apache/airflow:2.10.5
+    command: standalone
+    depends_on:
+      mysql:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      # LocalExecutor запускає завдання майже без пауз. Зі стандартною SQLite-конфігурацією
+      # паузи між завданнями можуть перевищити 30 с, і сенсор падатиме навіть без затримки
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      # Менше процесів вебсервера та довший старт — для машин з обмеженою пам'яттю
+      AIRFLOW__WEBSERVER__WORKERS: "1"
+      AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
+      AIRFLOW_CONN_GOIT_MYSQL_DB: mysql://root:local_password@mysql:3306/neo_data
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags:ro
+
+volumes:
+  mysql_data:
+  postgres_data:

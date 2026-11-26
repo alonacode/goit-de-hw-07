@@ -1,0 +1,4 @@
+# Для підказок у IDE; для запуску DAG достатньо Docker. Python 3.11
+--constraint https://raw.githubusercontent.com/apache/airflow/constraints-2.10.5/constraints-3.11.txt
+apache-airflow==2.10.5
+apache-airflow-providers-common-sql
